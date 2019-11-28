@@ -7,6 +7,7 @@ on:
 
 jobs:
   build-component:
+    name: Build Component
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -22,6 +23,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          profile: minimal
           override: true
       - uses: actions-rs/cargo@v1
         with:
@@ -47,6 +49,7 @@ jobs:
           path: artifacts
 
   build-ffi-android:
+    name: Build FFI Android
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -66,6 +69,7 @@ jobs:
           path: artifacts
 
   #build-ffi-ios:
+    #name: Build FFI iOS
     #runs-on: macOS-latest
     #strategy:
       #matrix:
@@ -87,6 +91,7 @@ jobs:
       #- uses: actions-rs/toolchain@v1
         #with:
           #toolchain: stable
+          #profile: minimal
           #override: true
           #target: ${{ matrix.target }}
       #- uses: actions-rs/cargo@v1
@@ -111,6 +116,7 @@ jobs:
           #path: target/${{ matrix.target }}/release
 
   #build-ffi-ios-universal:
+    #name: Build FFI iOS Universal
     #runs-on: macOS-latest
     #needs: build-ffi-ios
     #steps:
@@ -146,6 +152,7 @@ jobs:
   # 'download-artifact' actions. We could perhaps implement our own 'retrieve all build artifacts'
   # action.
   deploy:
+    name: Deploy
     runs-on: ubuntu-latest
     # Put the iOS build in this list when it's working.
     needs: [build-component, build-ffi-android]
@@ -246,18 +253,9 @@ jobs:
           api_version=$(grep "^version" < safe-api/Cargo.toml | head -n 1 | awk '{ print $3 }' | sed 's/\"//g')
           cli_version=$(grep "^version" < safe-cli/Cargo.toml | head -n 1 | awk '{ print $3 }' | sed 's/\"//g')
           ffi_version=$(grep "^version" < safe-ffi/Cargo.toml | head -n 1 | awk '{ print $3 }' | sed 's/\"//g')
-          commit_message=$(git log --format=%B -n 1 ${{ github.sha }})
           echo "::set-output name=api_version::$api_version"
           echo "::set-output name=cli_version::$cli_version"
           echo "::set-output name=ffi_version::$ffi_version"
-
-      # Put the artifacts into tar/zip archives for deployment with the release.
-      - shell: bash
-        run: make package-commit_hash-artifacts-for-deploy
-        if: "!startsWith(steps.commit_message.outputs.commit_message, 'Version change')"
-      - shell: bash
-        run: make package-version-artifacts-for-deploy
-        if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
       - shell: bash
         id: release_description
         run: |
@@ -266,6 +264,14 @@ jobs:
           description="${description//$'\n'/'%0A'}"
           description="${description//$'\r'/'%0D'}"
           echo "::set-output name=description::$description"
+        if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
+
+      # Put the artifacts into tar/zip archives for deployment with the release.
+      - shell: bash
+        run: make package-commit_hash-artifacts-for-deploy
+        if: "!startsWith(steps.commit_message.outputs.commit_message, 'Version change')"
+      - shell: bash
+        run: make package-version-artifacts-for-deploy
         if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
 
       # Create the release and attach safe-cli archives as assets.
@@ -337,6 +343,7 @@ jobs:
           args: s3 sync deploy/prod s3://safe-cli --acl public-read
 
   publish:
+    name: Publish
     needs: deploy
     runs-on: ubuntu-latest
     steps:
@@ -348,6 +355,7 @@ jobs:
           echo "::set-output name=commit_message::$commit_message"
       - uses: actions-rs/toolchain@v1
         with:
+          profile: minimal
           toolchain: stable
           override: true
         if: startsWith(steps.commit_message.outputs.commit_message, 'Version change')
